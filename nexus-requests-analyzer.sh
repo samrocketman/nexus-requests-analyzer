@@ -1,5 +1,5 @@
 #!/bin/bash
-# nexus-requests-analyzer 1.0
+# nexus-requests-analyzer 1.1
 # Created by Sam Gleske
 # Tue Jan 20 21:49:46 EST 2026
 # MIT Licensed - Copyright 2026 Sam Gleske - https://github.com/samrocketman
@@ -48,19 +48,25 @@ EOF
 fi
 unset missing
 
-filter() {
+awk_filter() {
   {
-# The extended regex for sed is so large that I am splitting it across multiple
+# The extended regex for awk is so large that I am splitting it across multiple
 # lines for readability with this filter command.
 cat <<'EOF'
 # substitute from line beginning
-s/^
+/^
 
-# ip
-([^ ]+)
+# host
+([^ ]+) +
+
+# ident (not normally used)
+[^ ]+ +
+
+# user
+([^ ]+) +
 
 # timestamp
-[^\[]+\[([^]]+)\] +
+\[([^]]+)\] +
 
 # method
 "([^ ]+) +
@@ -71,10 +77,10 @@ s/^
 # http code
 ([0-9]+) +
 
-# unknown
-[-0-9]+ +
+# content length
+([-0-9]+) +
 
-# download and upload bytes
+# bytes sent and response time
 ([0-9]+) ([0-9]+) +
 
 # useragent
@@ -83,19 +89,32 @@ s/^
 # everything else
 .*
 
-# replacement text after /
+# end of regex
 /
-  - ip: \1\n
-    timestamp: '\2'\n
-    http_method: \3\n
-    path: '\4'\n
-    repository: '\5'\n
-    http_code: \6\n
-    download_bytes: \7\n
-    upload_bytes: \8\n
+EOF
+
+  } | grep -v '^#' | tr -d '\n'
+}
+
+awk_replacement() {
+  {
+cat <<'EOF'
+# start of awk string
+"
+  - host: "arr[1]"\n
+    user: "arr[2]"\n
+    timestamp: '"arr[3]"'\n
+    http_method: "arr[4]"\n
+    path: '"arr[5]"'\n
+    repository: '"arr[6]"'\n
+    http_code: "arr[7]"\n
+    content_length: "arr[8]"\n
+    bytes_sent: "arr[9]"\n
+    elapsed_time: "arr[10]"\n
     useragent: >-\n
-      \9\n
-/
+      "arr[11]"\n
+# end of awk string
+"
 EOF
   } | grep -v '^#' | tr -d '\n'
 }
@@ -106,9 +125,19 @@ replace() {
     #  gsed -r "$@"
     #elif [ "$(uname)" = Darwin ]; then
     if [ "$(uname)" = Darwin ]; then
-      sed -E -e 's/\\"/\x01/g' -e "$@" -e 's/\x01/"/g'
+      sed -E -e 's/\\"/\x01/g' | \
+        awk "{
+          match(\$0, $1, arr)
+          print $2
+        }" | \
+        sed -E -e 's/\x01/"/g'
     else
-      sed -r "$@"
+      sed -r -e 's/\\"/\x01/g' | \
+        awk "{
+          match(\$0, $1, arr)
+          print $2
+        }" | \
+        sed -r -e 's/\x01/"/g'
     fi
   } | grep -v '^$'
 }
@@ -122,8 +151,9 @@ summarize_by() {
   case "$summarize" in
     bytes)
       yq -o=json .requests | jq --arg field "$group_by_field" --argjson threshold "$threshold" --argjson limit "$limit" '{
-        ("download_bytes_by_" + $field): (group_by(.[$field]) | map({(.[0][$field] | tostring): (map(.download_bytes) | add)}) | add | to_entries | sort_by(.value) | reverse | map(select(.value >= $threshold)) | if $limit > 0 then .[:$limit] else . end | from_entries),
-        ("upload_bytes_by_" + $field): (group_by(.[$field]) | map({(.[0][$field] | tostring): (map(.upload_bytes) | add)}) | add | to_entries | sort_by(.value) | reverse | map(select(.value >= $threshold)) | if $limit > 0 then .[:$limit] else . end | from_entries)
+        ("bytes_sent_by_" + $field): (group_by(.[$field]) | map({(.[0][$field] | tostring): (map(.bytes_sent) | add)}) | add | to_entries | sort_by(.value) | reverse | map(select(.value >= $threshold)) | if $limit > 0 then .[:$limit] else . end | from_entries),
+        ("content_length_by_" + $field): (group_by(.[$field]) | map({(.[0][$field] | tostring): (map(.content_length) | add)}) | add | to_entries | sort_by(.value) | reverse | map(select(.value >= $threshold)) | if $limit > 0 then .[:$limit] else . end | from_entries),
+        max_elapsed_time: (. | sort_by(.elapsed_time) | .[-1].elapsed_time)
       }' | {
         if [ "$group_by_field" = path ]; then
           cat
@@ -134,7 +164,8 @@ summarize_by() {
       ;;
     requests)
       yq -o=json .requests | jq --arg field "$group_by_field" --argjson threshold "$threshold" --argjson limit "$limit" '{
-        ("requests_by_" + $field): (group_by(.[$field]) | map({(.[0][$field] | tostring): length}) | add | to_entries | sort_by(.value) | reverse | map(select(.value >= $threshold)) | if $limit > 0 then .[:$limit] else . end | from_entries)
+        ("requests_by_" + $field): (group_by(.[$field]) | map({(.[0][$field] | tostring): length}) | add | to_entries | sort_by(.value) | reverse | map(select(.value >= $threshold)) | if $limit > 0 then .[:$limit] else . end | from_entries),
+        max_elapsed_time: (. | sort_by(.elapsed_time) | .[-1].elapsed_time)
       }' | {
         if [ "$group_by_field" = path ]; then
           cat
@@ -171,7 +202,11 @@ human_readable_bytes() {
     return
   fi
   yq -P | yaml_complex_keys_to_human_readable | \
-  awk '{
+  awk '$1 == "max_elapsed_time:" {
+    print;
+    next
+  };
+  {
     if (NF ~ /^[0-9]+$/) {
       bytes = $NF
       if (bytes >= 1000000000000) {
@@ -194,12 +229,16 @@ human_readable_bytes() {
 
 requests_to_yaml() {
   echo 'requests:'
-  grep -F '/repository/' | replace "$(filter)" | clf_to_unix
+  grep -F '/repository/' | \
+    replace "$(awk_filter)" "$(awk_replacement)" | \
+    sed -e 's/^\( \+\)user: -$/\1user: anonymous/' \
+        -e 's/^\( \+\)content_length: -$/\1content_length: 0/' | \
+      clf_to_unix
 }
 
 help_summarize() {
   echo 'Summarize by:' | yq -P
-  echo '  [ '"$(yq '.requests[0] | keys | map(select(test("_bytes$") | not)) | join(", ")' "$TMP_DIR"/requests.yaml)"' ]'
+  echo '  [ '"$(head -n14 "$TMP_DIR"/requests.yaml | yq '.requests[0] | keys | map(select(test("_bytes$") | not)) | join(", ")')"' ]'
 }
 
 default_summary() {
@@ -209,7 +248,7 @@ default_summary() {
     summarize_by "$count_by" repository 0 5 < "$TMP_DIR"/requests.yaml | \
       human_readable_bytes
     echo 'request_example:'
-    yq '.requests[0] | [.]' "$TMP_DIR"/requests.yaml
+    head -n14 "$TMP_DIR"/requests.yaml | yq '.requests[0] | [.]'
   } | yq -P
 }
 
@@ -445,7 +484,7 @@ $(color_section "SUMMARIZING DATA OPTIONS:")
   $(color_example "-n, --bytes-only")
     By default, this script will convert bytes to human readable bytes like KB,
     MB, GB, or TB.  If this options is passed only the raw bytes value is
-    output in a summary of upload/download bytes.
+    output in a summary of sent bytes.
 
 $(color_section "EXAMPLES:")
   Usage examples which help you make the most of this utility.  It is designed
@@ -466,20 +505,20 @@ $(color_section "EXAMPLES:")
 
     $(color_script "${0##*/}") $(color_example "-s http_method -c path/to/requests.log")
 
-  Show all IP addresses which transferred more than 1GB without limit.
+  Show all host addresses which transferred more than 1GB without limit.
 
-    $(color_script "${0##*/}") $(color_example "-s ip -t 1000000000 -l 0 path/to/requests.log")
+    $(color_script "${0##*/}") $(color_example "-s host -t 1000000000 -l 0 path/to/requests.log")
 
   Print largest data transfers requested within same second period.
 
     $(color_script "${0##*/}") $(color_example "-s timestamp path/to/requests.log")
 
-  Find all IP addresses which downloaded or uploaded a particular file.  You
+  Find all host addresses which downloaded or uploaded a particular file.  You
   must first dump all requests filtered by the file path followed by
-  summarizing requests by ip field.
+  summarizing requests by host field.
 
     $(color_script "${0##*/}") $(color_example "-r -f path='/repository/example/file' path/to/requests.log | \\")
-      $(color_script "${0##*/}") $(color_example "-y -s ip -l 0")
+      $(color_script "${0##*/}") $(color_example "-y -s host -l 0")
 
   For a specific repository, get the top 10 bytes transferred by file within
   the given repository.
@@ -665,30 +704,36 @@ done
         yq 'with(.requests[]; .useragent_id = (.useragent | @base64 | sub("=", "") | sub("^(.{0,10}).*$"; "${1}")))'
     fi
   }
-} > "$TMP_DIR"/requests.yaml
+} | {
+  if [ "$raw_requests" = true ]; then
+    {
+      if [ -n "${filter_value:-}" ]; then
+        filter_requests_by "$filter_method" "$summary_field" "$filter_value"
+      else
+        cat
+      fi
+    } | {
+      if {
+        [ -n "${timestamp_after:-}" ] || \
+        [ -n "${timestamp_before:-}" ]
+      }; then
+        filter_requests_by timestamp
+      else
+        cat
+      fi
+    }
+  else
+    cat > "$TMP_DIR"/requests.yaml
+  fi
+}
 
-if [ "$options_processed" = false ]; then
-  default_summary
+if [ "$raw_requests" = true ]; then
   exit
 fi
 
-if [ "$raw_requests" = true ]; then
-  {
-    if [ -n "${filter_value:-}" ]; then
-      filter_requests_by "$filter_method" "$summary_field" "$filter_value" < "$TMP_DIR"/requests.yaml
-    else
-      cat "$TMP_DIR"/requests.yaml
-    fi
-  } | {
-    if {
-      [ -n "${timestamp_after:-}" ] || \
-      [ -n "${timestamp_before:-}" ]
-    }; then
-      filter_requests_by timestamp
-    else
-      cat
-    fi
-  }
+
+if [ "$options_processed" = false ]; then
+  default_summary
   exit
 fi
 

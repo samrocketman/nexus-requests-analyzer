@@ -1,3 +1,21 @@
+# nexus-requests-analyzer 1.1
+
+- Bugfix output YAML format innacurate [#1]
+- New YAML fields:
+  - `user` (added to request record)
+  - `elapsed_time` (added to request record)
+  - `max_elapsed_time` (added to summary)
+- Renamed `ip` to `host`.
+- Renamed `download_bytes` to `bytes_sent`.
+- `upload_bytes` removed since it was incorrect and in its place `elapsed_time`
+  is parsed.
+- Internally, record parsing was switched from `sed` to `awk`, because `sed`
+  could only parse up to 9 groups in regex.  This comes with a slight
+  performance hit (a few seconds longer on large logs) but unfortunately `sed`
+  is not usable at all since the request record is longer than 9 fields.
+
+[#1]: https://github.com/samrocketman/nexus-requests-analyzer/issues/1
+
 # nexus-requests-analyzer 1.0
 
 Initial release Features

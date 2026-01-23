@@ -80,7 +80,7 @@ SUMMARIZING DATA OPTIONS:
   -n, --bytes-only
     By default, this script will convert bytes to human readable bytes like KB,
     MB, GB, or TB.  If this options is passed only the raw bytes value is
-    output in a summary of upload/download bytes.
+    output in a summary of sent bytes.
 
 EXAMPLES:
   Usage examples which help you make the most of this utility.  It is designed
@@ -101,20 +101,20 @@ EXAMPLES:
 
     nexus-requests-analyzer.sh -s http_method -c path/to/requests.log
 
-  Show all IP addresses which transferred more than 1GB without limit.
+  Show all host addresses which transferred more than 1GB without limit.
 
-    nexus-requests-analyzer.sh -s ip -t 1000000000 -l 0 path/to/requests.log
+    nexus-requests-analyzer.sh -s host -t 1000000000 -l 0 path/to/requests.log
 
   Print largest data transfers requested within same second period.
 
     nexus-requests-analyzer.sh -s timestamp path/to/requests.log
 
-  Find all IP addresses which downloaded or uploaded a particular file.  You
+  Find all host addresses which downloaded or uploaded a particular file.  You
   must first dump all requests filtered by the file path followed by
-  summarizing requests by ip field.
+  summarizing requests by host field.
 
     nexus-requests-analyzer.sh -r -f path='/repository/example/file' path/to/requests.log | \
-      nexus-requests-analyzer.sh -y -s ip -l 0
+      nexus-requests-analyzer.sh -y -s host -l 0
 
   For a specific repository, get the top 10 bytes transferred by file within
   the given repository.
