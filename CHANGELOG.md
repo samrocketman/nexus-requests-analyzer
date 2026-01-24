@@ -1,3 +1,8 @@
+# nexus-requests-analyzer 1.2
+
+- Fix platform dependent logic such as script not working on MacOS.
+- GNU awk is identified as a required dependency.
+
 # nexus-requests-analyzer 1.1
 
 - Bugfix output YAML format innacurate [#1]

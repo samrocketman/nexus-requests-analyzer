@@ -1,5 +1,5 @@
 #!/bin/bash
-# nexus-requests-analyzer 1.1
+# nexus-requests-analyzer 1.2
 # Created by Sam Gleske
 # Tue Jan 20 21:49:46 EST 2026
 # MIT Licensed - Copyright 2026 Sam Gleske - https://github.com/samrocketman
@@ -12,7 +12,7 @@
 #   See --help for more details and options.
 # REQUIREMENTS
 #   BSD or GNU coreutils
-#   BSD or GNU awk
+#   GNU awk
 #   jq - https://jqlang.org/
 #   yq - https://github.com/mikefarah/yq
 #   Python 2.7 or higher
@@ -21,12 +21,28 @@ export TMP_DIR
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
 
+# platform specific changes
+if command -v gawk &> /dev/null; then
+  function awk() { gawk "$@"; }
+fi
+if [ "$(uname)" = Darwin ]; then
+  sed=( sed -E )
+else
+  sed=( sed -r )
+fi
+
+# dependency checking
 missing=( )
 for x in awk cat dd grep jq sed yq; do
   if ! type -P "$x" &> /dev/null; then
     missing+=( "$x" )
   fi
 done
+if {
+  [ "$(uname)" = Darwin ] && ! command -v gawk &> /dev/null
+}; then
+  missing+=( "gawk (brew install gawk)" )
+fi
 if ! { command -v python || command -v python3; } &> /dev/null; then
   missing+=( "python or python3" )
 fi
@@ -40,7 +56,7 @@ if [ "${#missing[@]}" -gt 0 ]; then
 cat <<'EOF'
 REQUIREMENTS
   BSD or GNU coreutils
-  BSD or GNU awk
+  GNU awk
   jq - https://jqlang.org/
   yq - https://github.com/mikefarah/yq
 EOF
@@ -121,24 +137,12 @@ EOF
 
 replace() {
   {
-    #if type -P gsed &> /dev/null; then
-    #  gsed -r "$@"
-    #elif [ "$(uname)" = Darwin ]; then
-    if [ "$(uname)" = Darwin ]; then
-      sed -E -e 's/\\"/\x01/g' | \
-        awk "{
-          match(\$0, $1, arr)
-          print $2
-        }" | \
-        sed -E -e 's/\x01/"/g'
-    else
-      sed -r -e 's/\\"/\x01/g' | \
-        awk "{
-          match(\$0, $1, arr)
-          print $2
-        }" | \
-        sed -r -e 's/\x01/"/g'
-    fi
+    "${sed[@]}" -e 's/\\"/\x01/g' | \
+      awk "{
+        match(\$0, $1, arr)
+        print $2
+      }" | \
+      "${sed[@]}" -e 's/\x01/"/g'
   } | grep -v '^$'
 }
 
@@ -231,8 +235,8 @@ requests_to_yaml() {
   echo 'requests:'
   grep -F '/repository/' | \
     replace "$(awk_filter)" "$(awk_replacement)" | \
-    sed -e 's/^\( \+\)user: -$/\1user: anonymous/' \
-        -e 's/^\( \+\)content_length: -$/\1content_length: 0/' | \
+    "${sed[@]}" -e 's/^( +user:) -$/\1 anonymous/' \
+                -e 's/^( +content_length:) -$/\1 0/' | \
       clf_to_unix
 }
 
@@ -266,12 +270,12 @@ filter_requests_by() {
       literal)
         echo 'requests:'
         VALUE="$value" yq ".requests[] | select((.$field == env(VALUE))${invert_opt:-}) | [.]" | \
-          sed 's/^/  /'
+          "${sed[@]}" 's/^/  /'
         ;;
       regex)
         echo 'requests:'
         VALUE="$value" yq ".requests[] | select(.$field | test(env(VALUE))${invert_opt:-}) | [.]" | \
-          sed 's/^/  /'
+          "${sed[@]}" 's/^/  /'
         ;;
       timestamp)
         echo 'requests:'
@@ -284,11 +288,11 @@ filter_requests_by() {
         fi
         local filter
         # join filters separated by " and "; IFS only supports one character.
-        filter=$(IFS='%'; echo "${conditions[*]}" | sed 's/%/ and /g')
+        filter=$(IFS='%'; echo "${conditions[*]}" | "${sed[@]}" 's/%/ and /g')
 
         TIMESTAMP_AFTER="${timestamp_after:-}" TIMESTAMP_BEFORE="${timestamp_before:-}" \
           yq ".requests[] | select((${filter})${invert_opt:-}) | [.]" | \
-          sed 's/^/  /'
+          "${sed[@]}" 's/^/  /'
         ;;
       *)
         echo "Unknown filter method: $method" >&2

@@ -1,8 +1,8 @@
 # Sonatype Nexus Requests Analyzer
 
-Processes a [Sonatype Nexus request.log][1] and attempts to make sense of a
-large volume of requests.  Intended to help track down sources of request load
-spikes (amount and data).
+Processes a [Sonatype Nexus request.log][request.log] and attempts to make sense
+of a large volume of requests.  Intended to help track down sources of request
+load spikes (amount and data).
 
 Converts a Sonatype Nexus request log into YAML.
 
@@ -13,7 +13,7 @@ which can be downloaded from their GitHub releases.
 
 * GNU bash
 * BSD or GNU coreutils
-* BSD or GNU awk (maybe mawk I haven't tried)
+* GNU awk (on MacOS `brew install gawk`)
 * Python 2.7+ or Python 3.0+ (core Python only; no libraries necessary).
 * jq - [jqlang.org](https://jqlang.org/)
 * yq - [mikefarah/yq](https://github.com/mikefarah/yq)
@@ -95,6 +95,6 @@ nexus-requests-analyzer.sh -r -f repository=example path/to/requests.log | \
 
 [MIT Licensed] - Copyright 2026 Sam Gleske - https://github.com/samrocketman
 
-[1]: https://help.sonatype.com/en/logging.html#UUID-a3b553aa-d022-8659-b218-87e20786f957_bridgehead-idm234815356852628
+[request.log]: https://help.sonatype.com/en/logging.html#UUID-a3b553aa-d022-8659-b218-87e20786f957_bridgehead-idm234815356852628
 [help]: help.md
 [MIT Licensed]: LICENSE
