@@ -93,7 +93,7 @@ nexus-requests-analyzer.sh -r -f repository=example path/to/requests.log | \
 
 # License and Author
 
-[MIT Licensed] - Copyright 2026 Sam Gleske - https://github.com/samrocketman
+[MIT Licensed] - Copyright 2026 Sam Gleske - https://github.com/samrocketman/nexus-requests-analyzer
 
 [request.log]: https://help.sonatype.com/en/logging.html#UUID-a3b553aa-d022-8659-b218-87e20786f957_bridgehead-idm234815356852628
 [help]: help.md

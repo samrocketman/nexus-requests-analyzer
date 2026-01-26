@@ -1,3 +1,7 @@
+# nexus-requests-analyzer 1.3
+
+- Fix first entry cuttoff not showing `useragent_id` in summary log.
+
 # nexus-requests-analyzer 1.2
 
 - Fix platform dependent logic such as script not working on MacOS.

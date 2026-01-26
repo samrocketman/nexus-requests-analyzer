@@ -1,8 +1,8 @@
 #!/bin/bash
-# nexus-requests-analyzer 1.2
+# nexus-requests-analyzer 1.3
 # Created by Sam Gleske
 # Tue Jan 20 21:49:46 EST 2026
-# MIT Licensed - Copyright 2026 Sam Gleske - https://github.com/samrocketman
+# MIT Licensed - Copyright 2026 Sam Gleske - https://github.com/samrocketman/nexus-requests-analyzer
 # DESCRIPTION
 #   Processes a Sonatype Nexus request log and attempts to make sense of a
 #   large volume of requests.  Intended to help track down sources of request
@@ -242,7 +242,7 @@ requests_to_yaml() {
 
 help_summarize() {
   echo 'Summarize by:' | yq -P
-  echo '  [ '"$(head -n14 "$TMP_DIR"/requests.yaml | yq '.requests[0] | keys | map(select(test("_bytes$") | not)) | join(", ")')"' ]'
+  echo '  [ '"$(head -n15 "$TMP_DIR"/requests.yaml | yq '.requests[0] | keys | map(select(test("_bytes$") | not)) | join(", ")')"' ]'
 }
 
 default_summary() {
@@ -252,7 +252,7 @@ default_summary() {
     summarize_by "$count_by" repository 0 5 < "$TMP_DIR"/requests.yaml | \
       human_readable_bytes
     echo 'request_example:'
-    head -n14 "$TMP_DIR"/requests.yaml | yq '.requests[0] | [.]'
+    head -n15 "$TMP_DIR"/requests.yaml | yq '.requests[0] | [.]'
   } | yq -P
 }
 
