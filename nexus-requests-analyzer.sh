@@ -146,6 +146,11 @@ replace() {
   } | grep -v '^$'
 }
 
+# requests: + record items (14)
+first_yaml_record() {
+  head -n15 "$TMP_DIR"/requests.yaml
+}
+
 summarize_by() {
   local summarize="${1:-bytes}"
   local group_by_field="${2:-repository}"
@@ -242,7 +247,7 @@ requests_to_yaml() {
 
 help_summarize() {
   echo 'Summarize by:' | yq -P
-  echo '  [ '"$(head -n15 "$TMP_DIR"/requests.yaml | yq '.requests[0] | keys | map(select(test("_bytes$") | not)) | join(", ")')"' ]'
+  echo '  [ '"$(first_yaml_record | yq '.requests[0] | keys | map(select(test("_bytes$") | not)) | join(", ")')"' ]'
 }
 
 default_summary() {
@@ -252,7 +257,7 @@ default_summary() {
     summarize_by "$count_by" repository 0 5 < "$TMP_DIR"/requests.yaml | \
       human_readable_bytes
     echo 'request_example:'
-    head -n15 "$TMP_DIR"/requests.yaml | yq '.requests[0] | [.]'
+    first_yaml_record | yq '.requests[0] | [.]'
   } | yq -P
 }
 
