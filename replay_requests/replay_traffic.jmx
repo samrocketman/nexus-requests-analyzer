@@ -10,20 +10,24 @@
         </elementProp>
       </ThreadGroup>
       <hashTree>
+        <!-- Each thread reads from client_dir/thread_N.tsv -->
         <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Client Data" enabled="true">
           <stringProp name="filename">${__P(client_dir,clients)}/${__threadNum}.tsv</stringProp>
           <stringProp name="variableNames">timestamp_offset,client_id,http_method,path,useragent</stringProp>
           <boolProp name="ignoreFirstLine">true</boolProp>
           <stringProp name="delimiter">\t</stringProp>
+          <boolProp name="quotedData">true</boolProp>
           <boolProp name="recycle">false</boolProp>
           <boolProp name="stopThread">true</boolProp>
           <stringProp name="shareMode">shareMode.currentThread</stringProp>
         </CSVDataSet>
         <hashTree/>
+
         <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Delay">
           <stringProp name="ConstantTimer.delay">${__jexl3(${timestamp_offset} * 1000)}</stringProp>
         </ConstantTimer>
         <hashTree/>
+
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Request" enabled="true">
           <stringProp name="HTTPSampler.protocol">${__P(protocol,https)}</stringProp>
           <stringProp name="HTTPSampler.domain">${__P(host,localhost)}</stringProp>
