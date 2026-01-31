@@ -1,29 +1,52 @@
 #!/bin/bash
 # split_by_client.sh - Split TSV into per-client files
+#
+set -euo pipefail
+set -x
+export TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "${TMP_DIR}"' EXIT
 
-TSV_FILE="${1:?Usage: $0 <tsv_file> <output_dir>}"
-OUTPUT_DIR="${2:-.}/clients"
+OUTPUT_DIR="."
 
-mkdir -p "$OUTPUT_DIR"
+mkdir -p "${OUTPUT_DIR}/clients"
+export OUTPUT_DIR
 
-# Get header
-HEADER=$(head -1 "$TSV_FILE")
-
-# Split by client_id (column 2), preserving header in each file
-tail -n +2 "$TSV_FILE" | sort -t$'\t' -k2,2 -k1,1n | \
-awk -F'\t' -v dir="$OUTPUT_DIR" -v header="$HEADER" '
+# read from script stdin
+(
+# up to 100KB is allowed to be the header
+header_bytes=102400
+dd of="${TMP_DIR}"/tsv_header count="$header_bytes" bs=1 status=none
+found_bytes="$(wc -c < "${TMP_DIR}"/tsv_header | xargs)"
+export found_bytes header_bytes
+head -n1 "${TMP_DIR}"/tsv_header > "${TMP_DIR}"/tsv_header_line
 {
+  echo "$found_bytes" -lt "$header_bytes" >&2
+if [ "$found_bytes" -lt "$header_bytes" ]; then
+  dd if="${TMP_DIR}"/tsv_header count="$header_bytes" bs=1 status=none
+else
+  dd if="${TMP_DIR}"/tsv_header count="$header_bytes" bs=1 status=none
+  cat
+fi
+} | \
+awk -F'\t' -v dir="${OUTPUT_DIR}/clients" -v header="$(<"${TMP_DIR}"/tsv_header_line)" '
+BEGIN {
+  clients=1
+};
+{
+    print "processed"
     client = $2
     gsub(/[^a-zA-Z0-9._-]/, "_", client)  # sanitize filename
-    file = dir "/" client ".tsv"
     if (!(client in seen)) {
         print header > file
-        seen[client] = 1
+        seen[client] = clients
+        clients++
     }
+    file = dir "/" seen[client] ".tsv"
     print >> file
 }'
+)
 
 # Count clients
-CLIENT_COUNT=$(ls -1 "$OUTPUT_DIR"/*.tsv 2>/dev/null | wc -l)
-echo "Split into $CLIENT_COUNT client files in $OUTPUT_DIR/"
-echo "client_count=$CLIENT_COUNT"
+CLIENT_COUNT="$(find "${OUTPUT_DIR}/clients" -maxdepth 1 -type f -name '*.tsv' | wc -l | xargs)"
+echo "Split into $CLIENT_COUNT client files in $OUTPUT_DIR/clients"
+echo "client_count=$CLIENT_COUNT" > ./env
