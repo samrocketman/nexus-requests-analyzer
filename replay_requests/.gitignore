@@ -1,0 +1,11 @@
+# client request data
+clients
+batches
+# jmeter itself
+apache-*
+# jmeter test results
+*.jtl
+# jmeter log
+*.log
+# jmeter crash dump
+*.hprof
