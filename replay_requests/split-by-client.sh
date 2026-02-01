@@ -1,6 +1,5 @@
 #!/bin/bash
 # split_by_client.sh - Split TSV into per-client files
-#
 set -euo pipefail
 export TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "${TMP_DIR}"' EXIT
