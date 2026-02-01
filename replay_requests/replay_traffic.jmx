@@ -1,8 +1,25 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+Created by Sam Gleske
+MIT Licensed https://github.com/samrocketman/nexus-requests-analyzer
+
+A memory-optimized traffic replay test plan; where the results don't matter I'm
+just trying to replay a nexus request.log as traffic via jmeter.
+-->
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
   <hashTree>
-    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Per-Client Traffic Replay"/>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Per-Client Traffic Replay">
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+    </TestPlan>
     <hashTree>
+      <!-- HTTP connection settings for memory efficiency -->
+      <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP Request Defaults" enabled="true">
+        <stringProp name="HTTPSampler.connect_timeout">5000</stringProp>
+        <stringProp name="HTTPSampler.response_timeout">30000</stringProp>
+      </ConfigTestElement>
+      <hashTree/>
+
       <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Client Threads" enabled="true">
         <stringProp name="ThreadGroup.num_threads">${__P(threads,1)}</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController">
@@ -23,9 +40,45 @@
         </CSVDataSet>
         <hashTree/>
 
-        <ConstantTimer guiclass="ConstantTimerGui" testclass="ConstantTimer" testname="Delay">
-          <stringProp name="ConstantTimer.delay">${__jexl3(${timestamp_offset} * 1000)}</stringProp>
-        </ConstantTimer>
+        <!--
+            Notes so that I don't forget.
+
+            Calculate delay as delta from previous offset, not absolute. This
+            is necessary because the timestamp_offset is meant to be from the
+            first launch of jmeter.
+
+            Initially, I tried ConstantTimer.delay but that delay is relative to
+            the previous request. So the timestamp_offset must be recalculated
+            based the previous request finishing.
+
+            If the previous request takes longer than the intended delay, then
+            what ends up happening is I get a negative value. In this case, I
+            set no delay because I want the request launched as fast as
+            possible.
+
+            This method isn't the best but I think it's the best I have. I
+            can't think of a better way to try to emulate traffic from a
+            production sample.
+        -->
+        <JSR223Timer guiclass="TestBeanGUI" testclass="JSR223Timer" testname="Replay Timer" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="script">
+// Get current offset (seconds from test start)
+def currentOffset = vars.get("timestamp_offset") as Double
+
+// Get previous offset (default 0 for first request)
+def prevOffset = vars.get("__prevOffset") as Double ?: 0.0
+
+// Calculate delta in milliseconds
+def deltaMs = ((currentOffset - prevOffset) * 1000) as Long
+
+// Store current offset for next iteration
+vars.put("__prevOffset", currentOffset.toString())
+
+// Return delay (minimum 0 to handle any timing issues)
+return Math.max(0, deltaMs)
+          </stringProp>
+        </JSR223Timer>
         <hashTree/>
 
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Request" enabled="true">
@@ -34,6 +87,16 @@
           <stringProp name="HTTPSampler.port">${__P(port,443)}</stringProp>
           <stringProp name="HTTPSampler.path">${path}</stringProp>
           <stringProp name="HTTPSampler.method">${http_method}</stringProp>
+          <!--
+            Memory optimization:
+
+            Use MD5 hash sampler but set it to false so no response body is
+            processed. This forces JMeter to completely discard the response
+            body rather than saving it in-memory (which can cause an out of heap
+            error). I only care about sending production-like traffic to a host
+            and I'm not using JMeter to analyze the request result itself.
+          -->
+          <boolProp name="HTTPSampler.md5">false</boolProp>
         </HTTPSamplerProxy>
         <hashTree>
           <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Headers">
