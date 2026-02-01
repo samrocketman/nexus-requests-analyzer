@@ -9,6 +9,6 @@ yq -r -o=tsv '
   flatten |
   sort_by(.unix_time) |
   .[] |
-  [._offset, (.host + "." + .useragent_id + "." + (._offset | tostring) + "." + (._seq | tostring)), .http_method, .path, .useragent]
+  [._offset, (.host + "." + .useragent_id + "." + (._seq | tostring)), .http_method, .path, .useragent]
 '
 #yq -r -o=tsv '.requests[0].unix_time as $mod | .requests[] | [.unix_time % $mod, .host + "." + .useragent_id, .http_method, .path, .useragent]'
