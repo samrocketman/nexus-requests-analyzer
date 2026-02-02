@@ -6,32 +6,28 @@ to convert the request log into a jmeter traffic load which can be distributed
 across multiple hosts (distributing the load means there's nearly no limit in
 which I can replay traffic against another host).
 
-# Setup
+# Prerequisites
 
-Download JMeter into the current directory or have `jmeter` in your `$PATH`.
+Download [JMeter](https://jmeter.apache.org/) into the current directory or have
+`jmeter` in your `$PATH`.
 
     curl -sSfL https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-5.6.3.tgz | tar -xz
 
 All scripts assume `nexus-requests-analyzer.sh` is also in your `$PATH`.
 
-# JMeter support
+# Limitations
 
-Goals:
+* Only supports GET requests.
+* Does not currently support authentication.
 
-* Only support GET requests.
-* Don't support authentication.  I may revisit this.
-* Convert `requests.yaml` into jmeter client requests (replaying similar GET
-  requests at the same frequency a previous request load occurred).
-* Support jmeter replaying the traffic while managing host memory (in the case
-  of this load test I do not care about reporting the results).
-* Request traffic must be split across multiple unique clients (some clients can
-  be per second).
-* Because a desired request load on a destination Nexus host can surpass a
-  single load testing host, I want the ability to spread the clients across a
-  batch of many hosts initiating requests against Nexus.
-* In the future, I may integrate all jmeter support into the
-  `nexus_requests_analyzer.sh` script.  For now, these scripts just assume it is
-  in my `$PATH`.
+# Features
+
+- Converts `requests.yml` into jmeter client requests (TSV file of requests).
+- Low memory footprint while replaying requests.  JMeter isn't being used as a
+  request test tool in this case so most of its memory intense features are
+  discarded.
+- Request traffic can be split into batches where the request load can be
+  distributed across a cluster of hosts acting as a group of clients.
 
 # Testing platform
 
