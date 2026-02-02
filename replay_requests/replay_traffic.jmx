@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
 Created by Sam Gleske
-MIT Licensed https://github.com/samrocketman/nexus-requests-analyzer
+MIT Licensed - Copyright 2026 Sam Gleske - https://github.com/samrocketman/nexus-requests-analyzer
 
 A memory-optimized traffic replay test plan; where the results don't matter I'm
 just trying to replay a nexus request.log as traffic via jmeter.
