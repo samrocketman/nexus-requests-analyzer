@@ -20,6 +20,24 @@ just trying to replay a nexus request.log as traffic via jmeter.
       </ConfigTestElement>
       <hashTree/>
 
+      <!--
+        HTTP Authorization Manager for optional basic authentication.
+        If http_user property is empty, no authentication is applied.
+        Set via HTTP_USER and HTTP_PASSWORD environment variables in jmeter.sh.
+      -->
+      <AuthManager guiclass="AuthPanel" testclass="AuthManager" testname="HTTP Authorization Manager" enabled="true">
+        <collectionProp name="AuthManager.auth_list">
+          <elementProp name="" elementType="Authorization">
+            <stringProp name="Authorization.url">${__P(protocol,https)}://${__P(host,localhost)}:${__P(port,443)}</stringProp>
+            <stringProp name="Authorization.username">${__P(http_user,)}</stringProp>
+            <stringProp name="Authorization.password">${__P(http_password,)}</stringProp>
+            <stringProp name="Authorization.domain"></stringProp>
+            <stringProp name="Authorization.realm"></stringProp>
+          </elementProp>
+        </collectionProp>
+      </AuthManager>
+      <hashTree/>
+
       <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Client Threads" enabled="true">
         <stringProp name="ThreadGroup.num_threads">${__P(threads,1)}</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController">

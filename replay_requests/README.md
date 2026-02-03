@@ -18,7 +18,6 @@ All scripts assume `nexus-requests-analyzer.sh` is also in your `$PATH`.
 # Limitations
 
 * Only supports GET requests.
-* Does not currently support authentication.
 
 # Features
 

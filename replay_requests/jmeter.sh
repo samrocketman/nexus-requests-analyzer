@@ -41,6 +41,14 @@ Optional script arguments.
   --proto PROTOCOL
     Target PROTOCOL to replay requests against.
     Default: https
+
+Optional environment variables.
+  HTTP_USER
+    Username for HTTP basic authentication.  If not set, no authentication is
+    used.
+
+  HTTP_PASSWORD
+    Password for HTTP basic authentication.  Only used if HTTP_USER is set.
 EOF
   exit 1
 }
@@ -111,6 +119,8 @@ time jmeter \
   -Jport="${port:-443}" \
   -Jclient_dir="${client_dir}" \
   -Jthreads="${client_count}" \
+  -Jhttp_user="${HTTP_USER:-}" \
+  -Jhttp_password="${HTTP_PASSWORD:-}" \
   -Jjmeter.save.saveservice.response_data=false \
   -Jjmeter.save.saveservice.samplerData=false \
   -l /dev/null
