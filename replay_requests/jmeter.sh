@@ -49,6 +49,14 @@ Optional environment variables.
 
   HTTP_PASSWORD
     Password for HTTP basic authentication.  Only used if HTTP_USER is set.
+
+  HTTP_CONNECT_TIMEOUT
+    HTTP connection timeout in milliseconds.
+    Default: 5000
+
+  HTTP_RESPONSE_TIMEOUT
+    HTTP response timeout in milliseconds.
+    Default: 30000
 EOF
   exit 1
 }
@@ -121,6 +129,8 @@ time jmeter \
   -Jthreads="${client_count}" \
   -Jhttp_user="${HTTP_USER:-}" \
   -Jhttp_password="${HTTP_PASSWORD:-}" \
+  -Jhttp_connect_timeout="${HTTP_CONNECT_TIMEOUT:-5000}" \
+  -Jhttp_response_timeout="${HTTP_RESPONSE_TIMEOUT:-30000}" \
   -Jjmeter.save.saveservice.response_data=false \
   -Jjmeter.save.saveservice.samplerData=false \
   -l /dev/null
