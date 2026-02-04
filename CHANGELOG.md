@@ -1,3 +1,14 @@
+# nexus-requests-analyzer 1.4
+
+- Major new feature: replaying traffic with JMeter.  JMeter can emulate
+  production traffic or assert on the contents of traffic replayed.  If
+  asserting on the contents of the responses it can create a junit XML file
+  displaying test results.  See [replay requests README] for details.
+- `nexus-requests-analyzer.sh` can unique requests by FIELD which helps filter a
+  real request log for some test cases.
+
+[replay requests README.md]: replay_requests/README.md
+
 # nexus-requests-analyzer 1.3
 
 - Fix first entry cuttoff not showing `useragent_id` in summary log.

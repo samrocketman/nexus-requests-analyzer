@@ -17,6 +17,7 @@ which can be downloaded from their GitHub releases.
 * Python 2.7+ or Python 3.0+ (core Python only; no libraries necessary).
 * jq - [jqlang.org](https://jqlang.org/)
 * yq - [mikefarah/yq](https://github.com/mikefarah/yq)
+* Apache JMeter [if replaying requests](replay_requests/README.md)
 
 ## Examples
 
