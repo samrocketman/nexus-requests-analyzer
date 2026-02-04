@@ -1,3 +1,7 @@
+# nexus-requests-analyzer 1.5
+
+- Bugfix ipv6 hosts
+
 # nexus-requests-analyzer 1.4
 
 - Major new feature: replaying traffic with JMeter.  JMeter can emulate
