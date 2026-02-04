@@ -117,7 +117,7 @@ awk_replacement() {
 cat <<'EOF'
 # start of awk string
 "
-  - host: "arr[1]"\n
+  - host: '"arr[1]"'\n
     user: "arr[2]"\n
     timestamp: '"arr[3]"'\n
     http_method: "arr[4]"\n
