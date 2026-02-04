@@ -453,8 +453,9 @@ color_script() {
 helptext() {
 cat <<EOF
 $(color_section "SYNOPSIS:")
-  $(color_script "${0##*/}") $(color_example "[-f FIELD=VALUE] [-i] [-r|--requests] [-y] [--] [FILE...]")
-  $(color_script "${0##*/}") $(color_example "[-g FIELD=VALUE] [-i] [-r|--requests] [-y] [--] [FILE...]")
+  $(color_script "${0##*/}") $(color_example "[-f FIELD=VALUE] [-a TIMESTAMP] [-b TIMESTAMP] [-u FIELD] [-i] [-y] [--] [FILE...]")
+  $(color_script "${0##*/}") $(color_example "[-g FIELD=VALUE] [-a TIMESTAMP] [-b TIMESTAMP] [-u FIELD] [-i] [-y] [--] [FILE...]")
+  $(color_script "${0##*/}") $(color_example "[-r] [-y] [--] [FILE...]")
   $(color_script "${0##*/}") $(color_example "[-b] [-c] [-l LIMIT] [-s FIELD] [-t COUNT] [-y] [--] [FILE...]")
   $(color_script "${0##*/}") $(color_example "[-h|--help]")
 

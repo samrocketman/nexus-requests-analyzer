@@ -10,8 +10,9 @@ Results in the following output.
 
 ```
 SYNOPSIS:
-  nexus-requests-analyzer.sh [-f FIELD=VALUE] [-i] [-r|--requests] [-y] [--] [FILE...]
-  nexus-requests-analyzer.sh [-g FIELD=VALUE] [-i] [-r|--requests] [-y] [--] [FILE...]
+  nexus-requests-analyzer.sh [-f FIELD=VALUE] [-a TIMESTAMP] [-b TIMESTAMP] [-u FIELD] [-i] [-y] [--] [FILE...]
+  nexus-requests-analyzer.sh [-g FIELD=VALUE] [-a TIMESTAMP] [-b TIMESTAMP] [-u FIELD] [-i] [-y] [--] [FILE...]
+  nexus-requests-analyzer.sh [-r] [-y] [--] [FILE...]
   nexus-requests-analyzer.sh [-b] [-c] [-l LIMIT] [-s FIELD] [-t COUNT] [-y] [--] [FILE...]
   nexus-requests-analyzer.sh [-h|--help]
 
@@ -57,6 +58,11 @@ REQUEST OUTPUT OPTIONS:
 
   -r, --requests
     Print raw YAML of requests and exit.  Other options may filter output.
+
+  -u FIELD, --unique FIELD
+    Filter requests to only include the first occurrence of each unique value
+    in the specified FIELD.  For example, -u path will output only one
+    request per unique path value.
 
 SUMMARIZING DATA OPTIONS:
   -s FIELD, --sumarize-by FIELD
