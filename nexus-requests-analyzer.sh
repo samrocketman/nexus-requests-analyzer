@@ -1,5 +1,5 @@
 #!/bin/bash
-# nexus-requests-analyzer 1.3
+# nexus-requests-analyzer 1.4
 # Created by Sam Gleske
 # Tue Jan 20 21:49:46 EST 2026
 # MIT Licensed - Copyright 2026 Sam Gleske - https://github.com/samrocketman/nexus-requests-analyzer
