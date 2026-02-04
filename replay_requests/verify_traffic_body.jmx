@@ -1,0 +1,279 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+Created by Sam Gleske
+MIT Licensed - Copyright 2026 Sam Gleske - https://github.com/samrocketman/nexus-requests-analyzer
+
+A test plan that verifies MD5 checksums of HTTP responses against previously
+recorded baselines.  Run record_traffic_body.jmx first to establish baselines,
+then use this test plan to verify responses match.
+
+Verification uses checksums organized by client file with a 1:1 line mapping:
+  - checksums/1.tsv corresponds to clients/1.tsv
+  - Each request is verified against the checksum on the matching line
+
+The assertion verifies:
+  1. The request URL matches the recorded URL (sanity check)
+  2. The response code is 2xx (if original was 2xx)
+  3. The MD5 checksum matches the recorded baseline
+-->
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Verify Traffic Body Checksums">
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+    </TestPlan>
+    <hashTree>
+      <!-- HTTP connection settings for memory efficiency -->
+      <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP Request Defaults" enabled="true">
+        <stringProp name="HTTPSampler.connect_timeout">${__P(http_connect_timeout,5000)}</stringProp>
+        <stringProp name="HTTPSampler.response_timeout">${__P(http_response_timeout,30000)}</stringProp>
+      </ConfigTestElement>
+      <hashTree/>
+
+      <!--
+        HTTP Authorization Manager for optional basic authentication.
+        If http_user property is empty, no authentication is applied.
+        Set via HTTP_USER and HTTP_PASSWORD environment variables in jmeter.sh.
+      -->
+      <AuthManager guiclass="AuthPanel" testclass="AuthManager" testname="HTTP Authorization Manager" enabled="true">
+        <collectionProp name="AuthManager.auth_list">
+          <elementProp name="" elementType="Authorization">
+            <stringProp name="Authorization.url">${__P(protocol,https)}://${__P(host,localhost)}:${__P(port,443)}</stringProp>
+            <stringProp name="Authorization.username">${__P(http_user,)}</stringProp>
+            <stringProp name="Authorization.password">${__P(http_password,)}</stringProp>
+            <stringProp name="Authorization.domain"></stringProp>
+            <stringProp name="Authorization.realm"></stringProp>
+          </elementProp>
+        </collectionProp>
+      </AuthManager>
+      <hashTree/>
+
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Client Threads" enabled="true">
+        <stringProp name="ThreadGroup.num_threads">${__P(threads,1)}</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController">
+          <stringProp name="LoopController.loops">-1</stringProp>
+        </elementProp>
+      </ThreadGroup>
+      <hashTree>
+        <!-- Each thread reads from client_dir/thread_N.tsv -->
+        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Client Data" enabled="true">
+          <stringProp name="filename">${__P(client_dir,clients)}/${__threadNum}.tsv</stringProp>
+          <stringProp name="variableNames">counter,timestamp_offset,client_id,http_method,path,useragent</stringProp>
+          <boolProp name="ignoreFirstLine">true</boolProp>
+          <stringProp name="delimiter">\t</stringProp>
+          <boolProp name="quotedData">false</boolProp>
+          <boolProp name="recycle">false</boolProp>
+          <boolProp name="stopThread">true</boolProp>
+          <stringProp name="shareMode">shareMode.currentThread</stringProp>
+        </CSVDataSet>
+        <hashTree/>
+
+        <!--
+          Each thread reads expected checksums from checksums/thread_N.tsv
+          This file has a 1:1 correspondence with the client data file.
+          The counter column ensures ordering is verified.
+        -->
+        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Checksum Data" enabled="true">
+          <stringProp name="filename">${__P(checksums_dir,checksums)}/${__threadNum}.tsv</stringProp>
+          <stringProp name="variableNames">expected_counter,expected_client_id,expected_method,expected_path,expected_response_code,expected_md5</stringProp>
+          <boolProp name="ignoreFirstLine">true</boolProp>
+          <stringProp name="delimiter">\t</stringProp>
+          <boolProp name="quotedData">false</boolProp>
+          <boolProp name="recycle">false</boolProp>
+          <boolProp name="stopThread">true</boolProp>
+          <stringProp name="shareMode">shareMode.currentThread</stringProp>
+        </CSVDataSet>
+        <hashTree/>
+
+        <!--
+            Notes so that I don't forget.
+
+            Calculate delay as delta from previous offset, not absolute. This
+            is necessary because the timestamp_offset is meant to be from the
+            first launch of jmeter.
+
+            Initially, I tried ConstantTimer.delay but that delay is relative to
+            the previous request. So the timestamp_offset must be recalculated
+            based the previous request finishing.
+
+            If the previous request takes longer than the intended delay, then
+            what ends up happening is I get a negative value. In this case, I
+            set no delay because I want the request launched as fast as
+            possible.
+
+            This method isn't the best but I think it's the best I have. I
+            can't think of a better way to try to emulate traffic from a
+            production sample.
+        -->
+        <JSR223Timer guiclass="TestBeanGUI" testclass="JSR223Timer" testname="Replay Timer" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="script">
+// Get current offset (seconds from test start)
+def currentOffset = vars.get("timestamp_offset") as Double
+
+// Get previous offset (default 0 for first request)
+def prevOffset = vars.get("__prevOffset") as Double ?: 0.0
+
+// Calculate delta in milliseconds
+def deltaMs = ((currentOffset - prevOffset) * 1000) as Long
+
+// Store current offset for next iteration
+vars.put("__prevOffset", currentOffset.toString())
+
+// Return delay (minimum 0 to handle any timing issues)
+return Math.max(0, deltaMs)
+          </stringProp>
+        </JSR223Timer>
+        <hashTree/>
+
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Request" enabled="true">
+          <stringProp name="HTTPSampler.protocol">${__P(protocol,https)}</stringProp>
+          <stringProp name="HTTPSampler.domain">${__P(host,localhost)}</stringProp>
+          <stringProp name="HTTPSampler.port">${__P(port,443)}</stringProp>
+          <stringProp name="HTTPSampler.path">${path}</stringProp>
+          <stringProp name="HTTPSampler.method">${http_method}</stringProp>
+          <!--
+            Enable MD5 hash calculation for response body verification.
+            The MD5 hash will be compared against the recorded baseline.
+          -->
+          <boolProp name="HTTPSampler.md5">true</boolProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Headers">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="User-Agent" elementType="Header">
+                <stringProp name="Header.name">User-Agent</stringProp>
+                <stringProp name="Header.value">${useragent}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree/>
+
+          <!--
+            Verify MD5 checksum matches the recorded baseline from the checksum CSV.
+            The checksum data is read in parallel with client data (1:1 line mapping).
+            Sets a descriptive sample label for JUnit output including:
+            client_id, http_method, path, response_code, and checksum status.
+            Fails if: URL mismatch, missing checksum, or checksum doesn't match.
+          -->
+          <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Verify MD5 Checksum" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="script">
+// Get current request details including counter for ordering verification
+def counter = vars.get("counter")
+def clientId = vars.get("client_id")
+def method = vars.get("http_method")
+def path = vars.get("path")
+def responseCode = prev.getResponseCode()
+def actualMd5 = prev.getResponseDataAsString() ?: ""
+
+// Get expected values from checksum CSV (read in parallel with client data)
+def expectedCounter = vars.get("expected_counter")
+def expectedClientId = vars.get("expected_client_id")
+def expectedMethod = vars.get("expected_method")
+def expectedPath = vars.get("expected_path")
+def expectedResponseCode = vars.get("expected_response_code")
+def expectedMd5 = vars.get("expected_md5") ?: ""
+
+// Build descriptive label for JUnit output
+// Format: counter | client_id | METHOD path | response_code | checksum
+def label = "${counter} | ${clientId} | ${method} ${path} | ${responseCode} | ${actualMd5}"
+prev.setSampleLabel(label)
+
+// Verify checksum data was loaded
+if (expectedMethod == null || expectedPath == null) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(
+        "No checksum baseline found. Run record_traffic_body.jmx first. " +
+        "Counter: ${counter}; " +
+        "Client: '${clientId}'; " +
+        "Request: '${method}' '${path}'; " +
+        "Response Code: ${responseCode}; " +
+        "Actual MD5: ${actualMd5}")
+    return
+}
+
+// Verify the counter matches (ensures ordering is preserved)
+if (counter != expectedCounter) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(
+        "Counter mismatch - checksum file out of sync with client file. " +
+        "Expected Counter: ${expectedCounter}; " +
+        "Actual Counter: ${counter}; " +
+        "Client: '${clientId}'; " +
+        "Request: '${method}' '${path}'")
+    return
+}
+
+// Verify the client_id matches
+if (clientId != expectedClientId) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(
+        "Client ID mismatch - checksum file out of sync with client file. " +
+        "Counter: ${counter}; " +
+        "Expected Client: '${expectedClientId}'; " +
+        "Actual Client: '${clientId}'; " +
+        "Request: '${method}' '${path}'")
+    return
+}
+
+// Verify the request URL matches what was recorded (sanity check for 1:1 mapping)
+if (method != expectedMethod || path != expectedPath) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(
+        "Request mismatch - checksum file out of sync with client file. " +
+        "Counter: ${counter}; " +
+        "Client: '${clientId}'; " +
+        "Expected: '${expectedMethod}' '${expectedPath}'; " +
+        "Actual: '${method}' '${path}'")
+    return
+}
+
+// Only verify checksums for responses that were successful during recording
+if (expectedMd5 == null || expectedMd5.isEmpty()) {
+    // Original response was not 2xx, skip checksum verification but still pass
+    return
+}
+
+// Only verify successful responses (2xx)
+if (!responseCode.startsWith("2")) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(
+        "Response code mismatch. " +
+        "Counter: ${counter}; " +
+        "Client: '${clientId}'; " +
+        "Request: '${method}' '${path}'; " +
+        "Expected Response Code: ${expectedResponseCode}; " +
+        "Actual Response Code: ${responseCode}; " +
+        "Expected MD5: ${expectedMd5}; " +
+        "Actual MD5: ${actualMd5}")
+    return
+}
+
+// Verify MD5 hash is available
+if (actualMd5 == null || actualMd5.isEmpty()) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(
+        "No MD5 hash available for response. " +
+        "Counter: ${counter}; " +
+        "Client: '${clientId}'; " +
+        "Request: '${method}' '${path}'; " +
+        "Response Code: ${responseCode}; " +
+        "Expected MD5: ${expectedMd5}")
+    return
+}
+
+// Compare checksums
+if (actualMd5 != expectedMd5) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(
+        "Bad download found by content body MD5 checksum mismatch. Expected ${expectedMd5}. Counter: ${counter}; Request: ${method} '${path}'; Response Code: ${responseCode}.")
+}
+            </stringProp>
+          </JSR223Assertion>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

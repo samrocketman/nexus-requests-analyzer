@@ -33,6 +33,7 @@ fi
 awk -F'\t' -v dir="${OUTPUT_DIR}/clients" -v header="$(<"${TMP_DIR}"/tsv_header_line)" '
 BEGIN {
   clients=1
+  OFS="\t"
 };
 $0 == header {
   # skip header line
@@ -45,13 +46,17 @@ $0 == header {
     if (!(client in seen)) {
         seen[client] = clients
         file = dir "/" seen[client] ".tsv"
-        print header > file
+        # Add counter column to header
+        print "counter", header > file
         clients++
+        counter[client] = 0
     }
     if(file == "") {
       file = dir "/" seen[client] ".tsv"
     }
-    print >> file
+    # Increment counter for this client and prepend to row
+    counter[client]++
+    print counter[client], $0 >> file
     close(file)
     file=""
 }'

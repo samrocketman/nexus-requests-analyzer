@@ -1,6 +1,8 @@
 # client request data
 clients
 batches
+# recorded md5 checksums
+checksums
 # jmeter itself
 apache-*
 # jmeter test results
@@ -9,3 +11,5 @@ apache-*
 *.log
 # jmeter crash dump
 *.hprof
+# junit results
+*.xml

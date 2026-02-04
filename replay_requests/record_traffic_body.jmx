@@ -3,12 +3,20 @@
 Created by Sam Gleske
 MIT Licensed - Copyright 2026 Sam Gleske - https://github.com/samrocketman/nexus-requests-analyzer
 
-A memory-optimized traffic replay test plan; where the results don't matter I'm
-just trying to replay a nexus request.log as traffic via jmeter.
+A test plan that records MD5 checksums of HTTP responses.  Use this to
+establish a baseline of expected response bodies.  The checksums can later be
+verified using verify_traffic_body.jmx.
+
+Checksum files are organized by client file with a 1:1 line mapping:
+  - checksums/1.tsv corresponds to clients/1.tsv
+  - Each line in the checksum file matches the request on the same line
+
+Checksum TSV format (tab-separated):
+  counter  client_id  http_method  path  response_code  md5_checksum
 -->
 <jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
   <hashTree>
-    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Per-Client Traffic Replay">
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Record Traffic Body Checksums">
       <boolProp name="TestPlan.functional_mode">false</boolProp>
       <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
     </TestPlan>
@@ -41,18 +49,17 @@ just trying to replay a nexus request.log as traffic via jmeter.
       <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Client Threads" enabled="true">
         <stringProp name="ThreadGroup.num_threads">${__P(threads,1)}</stringProp>
         <elementProp name="ThreadGroup.main_controller" elementType="LoopController">
-          <stringProp name="LoopController.loops">1</stringProp>
+          <stringProp name="LoopController.loops">${__P(max_loops,1)}</stringProp>
         </elementProp>
       </ThreadGroup>
       <hashTree>
         <!-- Each thread reads from client_dir/thread_N.tsv -->
-        <!-- counter column is ignored for replay - only used for record/verify -->
         <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Client Data" enabled="true">
           <stringProp name="filename">${__P(client_dir,clients)}/${__threadNum}.tsv</stringProp>
           <stringProp name="variableNames">counter,timestamp_offset,client_id,http_method,path,useragent</stringProp>
           <boolProp name="ignoreFirstLine">true</boolProp>
           <stringProp name="delimiter">\t</stringProp>
-          <boolProp name="quotedData">true</boolProp>
+          <boolProp name="quotedData">false</boolProp>
           <boolProp name="recycle">false</boolProp>
           <boolProp name="stopThread">true</boolProp>
           <stringProp name="shareMode">shareMode.currentThread</stringProp>
@@ -100,6 +107,7 @@ return Math.max(0, deltaMs)
         </JSR223Timer>
         <hashTree/>
 
+
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="Request" enabled="true">
           <stringProp name="HTTPSampler.protocol">${__P(protocol,https)}</stringProp>
           <stringProp name="HTTPSampler.domain">${__P(host,localhost)}</stringProp>
@@ -107,15 +115,10 @@ return Math.max(0, deltaMs)
           <stringProp name="HTTPSampler.path">${path}</stringProp>
           <stringProp name="HTTPSampler.method">${http_method}</stringProp>
           <!--
-            Memory optimization:
-
-            Use MD5 hash sampler but set it to false so no response body is
-            processed. This forces JMeter to completely discard the response
-            body rather than saving it in-memory (which can cause an out of heap
-            error). I only care about sending production-like traffic to a host
-            and I'm not using JMeter to analyze the request result itself.
+            Enable MD5 hash calculation for response body verification.
+            The MD5 hash will be available in the sample result for saving.
           -->
-          <boolProp name="HTTPSampler.md5">false</boolProp>
+          <boolProp name="HTTPSampler.md5">true</boolProp>
         </HTTPSamplerProxy>
         <hashTree>
           <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Headers">
@@ -126,6 +129,109 @@ return Math.max(0, deltaMs)
               </elementProp>
             </collectionProp>
           </HeaderManager>
+          <hashTree/>
+
+          <!--
+            Save MD5 checksum for each request to a TSV file matching the client file.
+            Creates checksums/N.tsv corresponding to clients/N.tsv with a 1:1 line mapping.
+            Format: counter, client_id, http_method, path, response_code, md5_checksum (tab-separated)
+            Uses captured vars from PreProcessor. Post-run sort handles ordering.
+          -->
+          <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Save MD5 Checksum" enabled="true">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="script">
+def threadNum = ctx.getThreadNum() + 1
+def checksumsDir = props.get("checksums_dir") ?: "checksums"
+def clientDir = props.get("client_dir") ?: "clients"
+
+// Get response data
+def responseCode = prev.getResponseCode()
+def md5Hash = ""
+if (responseCode.startsWith("2")) {
+    md5Hash = prev.getResponseDataAsString() ?: ""
+}
+
+// Get the actual URL path from the response
+def actualPath = prev.getURL()?.getPath()
+if (actualPath == null) {
+    return
+}
+
+// Read CSV file to build a list of all rows with this path
+def csvFile = new File(clientDir, threadNum + ".tsv")
+def csvLines = csvFile.readLines()
+
+// Find all CSV rows that match this path
+def matchingRows = []
+for (int i = 1; i &lt; csvLines.size(); i++) {
+    def fields = csvLines[i].split("\t")
+    if (fields.length &gt; 4 &amp;&amp; fields[4] == actualPath) {
+        matchingRows.add([
+            counter: fields[0],
+            clientId: fields[2],
+            method: fields[3],
+            path: fields[4]
+        ])
+    }
+}
+
+if (matchingRows.isEmpty()) {
+    return  // Path not found in CSV
+}
+
+// Use file locking to append result
+def checksumFile = new File(checksumsDir, threadNum + ".tsv")
+checksumFile.parentFile.mkdirs()
+
+def raf = new RandomAccessFile(checksumFile, "rw")
+def channel = raf.getChannel()
+def lock = channel.lock()
+
+try {
+    // Read current file content
+    def existingContent = ""
+    def fileLen = checksumFile.length()
+    if (fileLen &gt; 0) {
+        def bytes = new byte[(int)fileLen]
+        raf.seek(0)
+        raf.readFully(bytes)
+        existingContent = new String(bytes, "UTF-8")
+    }
+
+    // Count how many times this path has already been recorded
+    def pathOccurrences = 0
+    if (existingContent) {
+        existingContent.split("\n").each { line -&gt;
+            if (line.contains("\t${actualPath}\t")) {
+                pathOccurrences++
+            }
+        }
+    }
+
+    // Get the matching row based on occurrence order
+    if (pathOccurrences &gt;= matchingRows.size()) {
+        return  // All occurrences of this path already recorded
+    }
+    def matchingRow = matchingRows[pathOccurrences]
+
+    // Build new content
+    def newContent = existingContent
+    if (!newContent.startsWith("counter\t")) {
+        newContent = "counter\tclient_id\thttp_method\tpath\tresponse_code\tmd5_checksum\n"
+    }
+    newContent += "${matchingRow.counter}\t${matchingRow.clientId}\t${matchingRow.method}\t${matchingRow.path}\t${responseCode}\t${md5Hash}\n"
+
+    // Write back
+    raf.seek(0)
+    raf.setLength(0)
+    raf.write(newContent.getBytes("UTF-8"))
+} finally {
+    lock.release()
+    channel.close()
+    raf.close()
+}
+            </stringProp>
+          </JSR223PostProcessor>
           <hashTree/>
         </hashTree>
       </hashTree>
