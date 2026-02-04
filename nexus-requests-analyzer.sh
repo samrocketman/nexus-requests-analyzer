@@ -307,6 +307,36 @@ filter_requests_by() {
     esac
 }
 
+unique_requests_by() {
+    local field="${1:-}"
+    echo 'requests:'
+    yq -o=json '.requests[]' | \
+      jq -c --arg field "$field" '.' | \
+      awk -F'\t' -v field="$field" '
+        BEGIN { }
+        {
+          # Parse JSON to extract field value
+          json = $0
+          # Use a simple pattern to extract the field value
+          pattern = "\"" field "\":\"?([^\",}]+)\"?"
+          if (match(json, pattern)) {
+            value = substr(json, RSTART, RLENGTH)
+            gsub("\"" field "\":\"?", "", value)
+            gsub("\"?$", "", value)
+          } else {
+            value = ""
+          }
+          if (!(value in seen)) {
+            seen[value] = 1
+            print json
+          }
+        }
+      ' | \
+      jq -s '.' | \
+      yq -P '.[] | [.]' | \
+      "${sed[@]}" 's/^/  /'
+}
+
 clf_to_timestamp_python_script() {
 cat << 'PYTHON_EOF'
 from __future__ import print_function
@@ -471,6 +501,11 @@ $(color_section "REQUEST OUTPUT OPTIONS:")
   $(color_example "-r, --requests")
     Print raw YAML of requests and exit.  Other options may filter output.
 
+  $(color_example "-u FIELD, --unique FIELD")
+    Filter requests to only include the first occurrence of each unique value
+    in the specified $(color_example "FIELD").  For example, $(color_example "-u path") will output only one
+    request per unique path value.
+
 $(color_section "SUMMARIZING DATA OPTIONS:")
   $(color_example "-s FIELD, --sumarize-by FIELD")
     Print a summary grouped by a particular request $(color_example "FIELD").
@@ -567,6 +602,7 @@ filter_method=literal
 invert_filter=false
 timestamp_after=""
 timestamp_before=""
+unique_field=""
 while [ "$#" -gt 0 ]; do
   case "${1:-}" in
     -a|--after)
@@ -641,6 +677,12 @@ while [ "$#" -gt 0 ]; do
     -t|--threshold)
       options_processed=true
       threshold_min="$2"
+      shift
+      ;;
+    -u|--unique)
+      options_processed=true
+      raw_requests=true
+      unique_field="$2"
       shift
       ;;
     -y|--yaml)
@@ -727,6 +769,12 @@ done
         [ -n "${timestamp_before:-}" ]
       }; then
         filter_requests_by timestamp
+      else
+        cat
+      fi
+    } | {
+      if [ -n "${unique_field:-}" ]; then
+        unique_requests_by "$unique_field"
       else
         cat
       fi
